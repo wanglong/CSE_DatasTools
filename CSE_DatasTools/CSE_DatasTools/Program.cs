@@ -1,8 +1,10 @@
-using CSE_DatasTools.Services;
 using CSE_DatasTools.Models;
+using CSE_DatasTools.Services;
 using Microsoft.Extensions.Configuration;
 using Serilog;
 using Serilog.Context;
+using System.Diagnostics;
+using System.Runtime;
 
 namespace CSE_DatasTools
 {
@@ -10,6 +12,10 @@ namespace CSE_DatasTools
     {
         static void Main(string[] args)
         {
+
+            // 设置内存限制
+            GCSettings.LatencyMode = GCLatencyMode.LowLatency;
+            
             // 生成唯一的 TraceId
             var traceId = Guid.NewGuid().ToString("N");
 
@@ -115,7 +121,12 @@ namespace CSE_DatasTools
 
                     Log.Information("Found {FolderCount} folders to process", subdirectories.Count);
 
-                    foreach (var folder in subdirectories)
+                    // 添加Data1处理性能监控
+                    var data1ProcessingStopwatch = Stopwatch.StartNew();
+                    var memoryBeforeData1 = GC.GetTotalMemory(false);
+
+                    // 1. 并行处理文件夹
+                    Parallel.ForEach(subdirectories, folder =>
                     {
                         try
                         {
@@ -146,9 +157,15 @@ namespace CSE_DatasTools
                         {
                             Log.Error(ex, "Error processing folder {FolderPath}", folder);
                         }
-                    }
+                    });
+
+                    data1ProcessingStopwatch.Stop();
+                    var memoryAfterData1 = GC.GetTotalMemory(false);
+                    var memoryUsedData1 = memoryAfterData1 - memoryBeforeData1;
 
                     Log.Information("=============================");
+                    Log.Information("Data1 处理完成，耗时: {ElapsedMilliseconds}ms, 内存使用: {MemoryUsed} bytes",
+                        data1ProcessingStopwatch.ElapsedMilliseconds, memoryUsedData1);
 
                     // 处理 Data2 文件夹 - 批量提取间期测量值并生成汇总统计
                     if (Directory.Exists(data2Directory))
@@ -168,8 +185,16 @@ namespace CSE_DatasTools
 
                             if (csvFiles.Count > 0)
                             {
+                                // 添加Data2处理性能监控
+                                var data2ProcessingStopwatch = Stopwatch.StartNew();
+                                var memoryBeforeData2 = GC.GetTotalMemory(false);
+
                                 // 批量提取间期测量值
                                 var measurementSummaries = processor.ProcessData2Folder(data2CurrentDirectory, reader);
+
+                                data2ProcessingStopwatch.Stop();
+                                var memoryAfterData2 = GC.GetTotalMemory(false);
+                                var memoryUsedData2 = memoryAfterData2 - memoryBeforeData2;
 
                                 if (measurementSummaries.Count > 0)
                                 {
@@ -194,6 +219,9 @@ namespace CSE_DatasTools
                                 {
                                     Log.Warning("  未提取到任何测量数据");
                                 }
+
+                                Log.Information("Data2 处理完成，耗时: {ElapsedMilliseconds}ms, 内存使用: {MemoryUsed} bytes",
+                                    data2ProcessingStopwatch.ElapsedMilliseconds, memoryUsedData2);
                             }
                             else
                             {
