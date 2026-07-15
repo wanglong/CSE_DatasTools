@@ -30,5 +30,8 @@ namespace CSE_DatasTools.Models
 
         [Name("标准值")]
         public double StandardValue { get; set; }
+
+        [Name("误差")]
+        public double ErrorValue { get; set; }
     }
 }

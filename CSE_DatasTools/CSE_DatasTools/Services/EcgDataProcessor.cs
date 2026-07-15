@@ -1,4 +1,5 @@
 using CSE_DatasTools.Models;
+using Serilog;
 
 namespace CSE_DatasTools.Services
 {
@@ -34,6 +35,21 @@ namespace CSE_DatasTools.Services
                 var m4 = file4Measurements.FirstOrDefault(m => m.Lead == lead);
                 var m5 = file5Measurements.FirstOrDefault(m => m.Lead == lead);
 
+                //void AddSummary(string lead, string type, Func<EcgMeasurement, double> getValue)
+                //{
+                //    summaries.Add(new AmplitudeSummary
+                //    {
+                //        Lead = lead,
+                //        MeasurementType = type,
+                //        File1Value = getValue(m1),
+                //        File2Value = getValue(m2),
+                //        File3Value = getValue(m3),
+                //        File4Value = getValue(m4),
+                //        File5Value = getValue(m5),
+                //        AverageValue = Math.Round(new[] { m1, m2, m3, m4, m5 }.Average(getValue), 0)
+                //    });
+                //}
+
                 if (m1 != null && m2 != null && m3 != null && m4 != null && m5 != null)
                 {
                     // P1
@@ -49,6 +65,8 @@ namespace CSE_DatasTools.Services
                         AverageValue = Math.Round((m1.P1Amplitude + m2.P1Amplitude + m3.P1Amplitude + m4.P1Amplitude + m5.P1Amplitude) / 5, 0),
                         StandardValue = 0
                     });
+
+                    //AddSummary(lead, "P1", m => m.P1Amplitude);
 
                     // Q
                     summaries.Add(new AmplitudeSummary
@@ -312,11 +330,11 @@ namespace CSE_DatasTools.Services
 
             if (csvFiles.Count == 0)
             {
-                Console.WriteLine($"警告：文件夹 {folderPath} 中没有找到CSV文件");
+                Log.Warning("警告：文件夹 {FolderPath} 中没有找到CSV文件", folderPath);
                 return new List<IntervalMeasurementSummary>();
             }
 
-            Console.WriteLine($"找到 {csvFiles.Count} 个CSV文件，开始处理...");
+            Log.Information("找到 {CsvFileCount} 个CSV文件，开始处理...", csvFiles.Count);
 
             var summaries = new List<IntervalMeasurementSummary>();
 
@@ -330,7 +348,7 @@ namespace CSE_DatasTools.Services
 
                     if (string.IsNullOrEmpty(fileNumber))
                     {
-                        Console.WriteLine($"  跳过文件：{fileName}（无法提取编号）");
+                        Log.Warning("  跳过文件：{FileName}（无法提取编号）", fileName);
                         continue;
                     }
 
@@ -348,11 +366,11 @@ namespace CSE_DatasTools.Services
                     };
 
                     summaries.Add(summary);
-                    Console.WriteLine($"  已处理：{fileNumber}");
+                    Log.Information("  已处理：{FileNumber}", fileNumber);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"  处理文件 {csvFile} 时出错：{ex.Message}");
+                    Log.Error(ex, "  处理文件 {CsvFile} 时出错", csvFile);
                 }
             }
 

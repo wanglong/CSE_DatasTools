@@ -1,5 +1,8 @@
 using CSE_DatasTools.Services;
 using CSE_DatasTools.Models;
+using Microsoft.Extensions.Configuration;
+using Serilog;
+using Serilog.Context;
 
 namespace CSE_DatasTools
 {
@@ -7,126 +10,222 @@ namespace CSE_DatasTools
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("ECG Amplitude Extraction Tool");
-            Console.WriteLine("=============================");
+            // 生成唯一的 TraceId
+            var traceId = Guid.NewGuid().ToString("N");
 
-            // 将当前工作目录切换到 D:\Datas（按用户要求）
-            var targetDirectory = @"D:\Datas";
-            if (!Directory.Exists(targetDirectory))
+            // ============================================================
+            // 1. 加载配置文件 appsettings.json，获取数据路径配置
+            // ============================================================
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+                .Build();
+
+            var dataPaths = configuration.GetSection("DataPaths").Get<DataPathConfig>()
+                           ?? new DataPathConfig();
+
+            // 如果配置项为空或未配置，则使用代码中的默认值
+            var baseDirectory    = !string.IsNullOrWhiteSpace(dataPaths.BaseDirectory)
+                                       ? dataPaths.BaseDirectory
+                                       : @"D:\Datas";
+            var data1Directory   = !string.IsNullOrWhiteSpace(dataPaths.Data1)
+                                       ? dataPaths.Data1
+                                       : @"D:\Datas\Data1";
+            var data2Directory   = !string.IsNullOrWhiteSpace(dataPaths.Data2)
+                                       ? dataPaths.Data2
+                                       : @"D:\Datas\Data2";
+
+            var data2DirectoryResult = !string.IsNullOrWhiteSpace(dataPaths.Data2Result)
+                                       ? dataPaths.Data2Result
+                                       : @"D:\Datas\Data2\Result";
+
+            var logDirectory     = !string.IsNullOrWhiteSpace(dataPaths.LogDirectory)
+                                       ? dataPaths.LogDirectory
+                                       : @"D:\Datas\logs";
+
+            // ============================================================
+            // 2. 配置 Serilog — 日志路径从配置读取
+            // ============================================================
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .Enrich.FromLogContext()
+                .Enrich.WithCorrelationIdHeader("TraceId")
+                .WriteTo.Console(
+                    outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [TraceId:{CorrelationId}] {Message:lj}{NewLine}{Exception}",
+                    theme: Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
+                )
+                .WriteTo.File(
+                    path: Path.Combine(logDirectory, "app-.txt"),
+                    rollingInterval: RollingInterval.Day,
+                    outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [TraceId:{CorrelationId}] {Message:lj}{NewLine}{Exception}",
+                    shared: true,
+                    flushToDiskInterval: TimeSpan.FromSeconds(1)
+                )
+                .WriteTo.File(
+                    path: Path.Combine(logDirectory, "app-.json"),
+                    rollingInterval: RollingInterval.Day,
+                    formatter: new Serilog.Formatting.Compact.CompactJsonFormatter(),
+                    shared: true,
+                    flushToDiskInterval: TimeSpan.FromSeconds(1)
+                )
+                // Optional: Uncomment for Seq integration
+                //.WriteTo.Seq("http://localhost:5341")
+                .CreateLogger();
+
+            try
             {
-                Console.WriteLine($"目标目录不存在: {targetDirectory}");
-                Console.WriteLine("请在继续前创建该目录，或修改为存在的路径。");
-                Console.WriteLine("按任意键退出...");
-                Console.ReadKey();
-                return;
-            }
-
-            // 设置进程当前目录为目标目录，然后从该目录枚举子文件夹
-            targetDirectory = @"D:\Datas\Data1";
-            Directory.SetCurrentDirectory(targetDirectory);
-            var currentDirectory = Directory.GetCurrentDirectory();
-            var subdirectories = Directory.GetDirectories(currentDirectory)
-                                          .ToList();
-
-            var reader = new EcgFileReader();
-            var writer = new EcgFileWriter();
-            var processor = new EcgDataProcessor();
-
-            Console.WriteLine($"Found {subdirectories.Count} folders to process.");
-
-            foreach (var folder in subdirectories)
-            {
-                try
+                // Push the TraceId to the LogContext for all logs in this execution
+                using (LogContext.PushProperty("CorrelationId", traceId))
                 {
-                    var folderName = Path.GetFileName(folder);
-                    Console.WriteLine($"Processing folder: {folderName}");
+                    Log.Information("ECG Amplitude Extraction Tool - Starting");
+                    Log.Information("TraceId: {TraceId}", traceId);
+                    Log.Information("配置文件路径: {ConfigPath}",
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json"));
+                    Log.Information("DataPaths -> Base: {Base}, Data1: {Data1}, Data2: {Data2}, Log: {Log}",
+                        baseDirectory, data1Directory, data2Directory, logDirectory);
+                    Log.Information("=============================");
 
-                    // 生成幅值测量 CSV
-                    var summaries = processor.ProcessFolder(folder, reader);
-
-                    var outputFileName = $"{folderName}-幅值测量.csv";
-                    var outputPath = Path.Combine(currentDirectory, outputFileName);
-
-                    writer.WriteAmplitudeSummary(outputPath, summaries);
-
-                    Console.WriteLine($"  Generated: {outputFileName}");
-
-                    // 生成间期测量 CSV
-                    var intervalSummaries = processor.ProcessFolderForIntervals(folder, reader);
-
-                    var intervalOutputFileName = $"{folderName}-间期测量.csv";
-                    var intervalOutputPath = Path.Combine(currentDirectory, intervalOutputFileName);
-
-                    writer.WriteIntervalSummary(intervalOutputPath, intervalSummaries);
-
-                    Console.WriteLine($"  Generated: {intervalOutputFileName}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"  Error processing {folder}: {ex.Message}");
-                }
-            }
-
-            Console.WriteLine("=============================");
-
-            // 处理 Data2 文件夹 - 批量提取间期测量值并生成汇总统计
-            targetDirectory = @"D:\Datas\Data2";
-
-            if (Directory.Exists(targetDirectory))
-            {
-                Console.WriteLine("开始处理 Data2 文件夹...");
-                Directory.SetCurrentDirectory(targetDirectory);
-                var data2CurrentDirectory = Directory.GetCurrentDirectory();
-
-                try
-                {
-                    // 获取所有CSV文件
-                    var csvFiles = Directory.GetFiles(data2CurrentDirectory, "*.csv")
-                                            .OrderBy(f => f)
-                                            .ToList();
-
-                    Console.WriteLine($"找到 {csvFiles.Count} 个CSV文件");
-
-                    if (csvFiles.Count > 0)
+                    // 检查基础目录是否存在
+                    if (!Directory.Exists(baseDirectory))
                     {
-                        // 批量提取间期测量值
-                        var measurementSummaries = processor.ProcessData2Folder(data2CurrentDirectory, reader);
+                        Log.Warning("基础目录不存在: {BaseDirectory}", baseDirectory);
+                        Log.Warning("请在 appsettings.json 中配置正确的 DataPaths.BaseDirectory，或创建该目录。");
+                        Log.Warning("按任意键退出...");
+                        Console.ReadKey();
+                        return;
+                    }
 
-                        if (measurementSummaries.Count > 0)
+                    // 设置进程当前目录为 Data1 目录，然后枚举子文件夹
+                    if (!Directory.Exists(data1Directory))
+                    {
+                        Log.Warning("Data1 目录不存在: {Data1Directory}", data1Directory);
+                        Log.Warning("按任意键退出...");
+                        Console.ReadKey();
+                        return;
+                    }
+
+                    Directory.SetCurrentDirectory(data1Directory);
+                    var currentDirectory = Directory.GetCurrentDirectory();
+                    var subdirectories = Directory.GetDirectories(currentDirectory)
+                                                  .ToList();
+
+                    var reader = new EcgFileReader();
+                    var writer = new EcgFileWriter();
+                    var processor = new EcgDataProcessor();
+
+                    Log.Information("Found {FolderCount} folders to process", subdirectories.Count);
+
+                    foreach (var folder in subdirectories)
+                    {
+                        try
                         {
-                            // 生成汇总统计CSV
-                            var summaryOutputFileName = "汇总统计.csv";
-                            var summaryOutputPath = Path.Combine(data2CurrentDirectory, summaryOutputFileName);
+                            var folderName = Path.GetFileName(folder);
+                            Log.Information("Processing folder: {FolderName}", folderName);
 
-                            writer.WriteIntervalMeasurementSummary(summaryOutputPath, measurementSummaries);
+                            // 生成幅值测量 CSV
+                            var summaries = processor.ProcessFolder(folder, reader);
 
-                            Console.WriteLine($"  已生成：{summaryOutputFileName}");
-                            Console.WriteLine($"  共汇总 {measurementSummaries.Count} 个文件的测量数据");
+                            var outputFileName = $"{folderName}-幅值测量.csv";
+                            var outputPath = Path.Combine(currentDirectory, outputFileName);
+
+                            writer.WriteAmplitudeSummary(outputPath, summaries);
+
+                            Log.Information("  Generated: {OutputFileName}", outputFileName);
+
+                            // 生成间期测量 CSV
+                            var intervalSummaries = processor.ProcessFolderForIntervals(folder, reader);
+
+                            var intervalOutputFileName = $"{folderName}-间期测量.csv";
+                            var intervalOutputPath = Path.Combine(currentDirectory, intervalOutputFileName);
+
+                            writer.WriteIntervalSummary(intervalOutputPath, intervalSummaries);
+
+                            Log.Information("  Generated: {IntervalOutputFileName}", intervalOutputFileName);
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            Console.WriteLine("  未提取到任何测量数据");
+                            Log.Error(ex, "Error processing folder {FolderPath}", folder);
+                        }
+                    }
+
+                    Log.Information("=============================");
+
+                    // 处理 Data2 文件夹 - 批量提取间期测量值并生成汇总统计
+                    if (Directory.Exists(data2Directory))
+                    {
+                        Log.Information("开始处理 Data2 文件夹");
+                        Directory.SetCurrentDirectory(data2Directory);
+                        var data2CurrentDirectory = Directory.GetCurrentDirectory();
+
+                        try
+                        {
+                            // 获取所有CSV文件
+                            var csvFiles = Directory.GetFiles(data2CurrentDirectory, "*.csv")
+                                                    .OrderBy(f => f)
+                                                    .ToList();
+
+                            Log.Information("找到 {CsvFileCount} 个CSV文件", csvFiles.Count);
+
+                            if (csvFiles.Count > 0)
+                            {
+                                // 批量提取间期测量值
+                                var measurementSummaries = processor.ProcessData2Folder(data2CurrentDirectory, reader);
+
+                                if (measurementSummaries.Count > 0)
+                                {
+                                    // 生成汇总统计CSV
+                                    var summaryOutputFileName = "汇总统计.csv";
+
+                                    // 确保结果目录存在，优先使用 data2DirectoryResult
+                                    if (!Directory.Exists(data2DirectoryResult))
+                                    {
+                                        Directory.CreateDirectory(data2DirectoryResult);
+                                        Log.Information("已创建 Data2 结果目录: {Data2DirectoryResult}", data2DirectoryResult);
+                                    }
+
+                                    var summaryOutputPath = Path.Combine(data2DirectoryResult, summaryOutputFileName);
+
+                                    writer.WriteIntervalMeasurementSummary(summaryOutputPath, measurementSummaries);
+
+                                    Log.Information("  已生成：{SummaryOutputFileName} (路径: {SummaryOutputPath})", summaryOutputFileName, summaryOutputPath);
+                                    Log.Information("  共汇总 {MeasurementCount} 个文件的测量数据", measurementSummaries.Count);
+                                }
+                                else
+                                {
+                                    Log.Warning("  未提取到任何测量数据");
+                                }
+                            }
+                            else
+                            {
+                                Log.Warning("  Data2 文件夹中没有CSV文件");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error(ex, "处理 Data2 文件夹时出错");
                         }
                     }
                     else
                     {
-                        Console.WriteLine("  Data2 文件夹中没有CSV文件");
+                        Log.Warning("Data2 文件夹不存在: {Data2Directory}", data2Directory);
                     }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"  处理 Data2 文件夹时出错：{ex.Message}");
-                }
-            }
-            else
-            {
-                Console.WriteLine($"Data2 文件夹不存在: {targetDirectory}");
-            }
 
-            Console.WriteLine("=============================");
-            Console.WriteLine("Processing complete!");
-            Console.WriteLine("Press any key to exit...");
-            Console.ReadKey();
+                    Log.Information("=============================");
+                    Log.Information("Processing complete!");
+                    Log.Information("TraceId: {TraceId}", traceId);
+                    Log.Information("Press any key to exit...");
+                    Console.ReadKey();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Fatal(ex, "应用程序发生致命错误");
+                throw;
+            }
+            finally
+            {
+                Log.CloseAndFlush();
+            }
         }
     }
 }
