@@ -3,6 +3,7 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using System.Globalization;
 using System.Reflection.PortableExecutable;
+using Serilog;
 
 namespace CSE_DatasTools.Services
 {
@@ -13,8 +14,9 @@ namespace CSE_DatasTools.Services
             // 兼容多种 CSV 编码与非标准表头：按列索引解析数据行，避免依赖文件中可能损坏或不同编码的表头文本。
             var results = new List<EcgRecord>();
 
-            // 先用默认编码读取；如果需要可以在外部调用时确保文件编码正确
-            using var reader = new StreamReader(filePath);
+            // 使用缓冲读取优化文件I/O性能
+            using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
+            using var reader = new StreamReader(fileStream, leaveOpen: false);
             var config = new CsvConfiguration(CultureInfo.InvariantCulture)
             {
                 HasHeaderRecord = true,
@@ -94,7 +96,7 @@ namespace CSE_DatasTools.Services
                     };
 
                     results.Add(rec);
-                }                
+                }
             }
 
             return results;
@@ -124,100 +126,86 @@ namespace CSE_DatasTools.Services
             return measurements;
         }
 
-        public IntervalMeasurement ExtractIntervalMeasurements(string filePath)
+        public async Task<IntervalMeasurement> ExtractIntervalMeasurementsAsync(string filePath)
         {
             var result = new IntervalMeasurement();
 
-            // 尝试使用多种编码读取文件
-            var encodings = new[]
+            // 使用异步I/O和缓冲读取优化性能
+            try
             {
-                //System.Text.Encoding.UTF8,
-                //System.Text.Encoding.GetEncoding("GB2312"),
-                //System.Text.Encoding.GetEncoding("GBK"),
-                //System.Text.Encoding.Default,
-                System.Text.Encoding.ASCII
-            };
+                // 使用异步文件读取
+                using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
+                using var reader = new StreamReader(fileStream, leaveOpen: false);
+                var content = await reader.ReadToEndAsync();
 
-            string[] lines = Array.Empty<string>();
-            bool readSuccess = false;
+                // 按行分割
+                var lines = content.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
 
-            foreach (var encoding in encodings)
-            {
-                try
-                {                    
-                    var testLinesAll = File.ReadAllLines(filePath, encoding);
-                    // 跳过文件开头的 13 行（按要求忽略前 13 行内容），防止这些行被 CsvReader 解析为数据或表头
-                    string[] testLines = Array.Empty<string>();
-                    List<string> filter = new List<string>();
-                    for (int i = 14; i < testLinesAll.Length && i < 21; i++)
-                    {
-                        filter.Add(testLinesAll[i]);
-                    }
+                // 跳过文件开头的 14 行
+                var relevantLines = lines.Skip(14).Take(7).ToArray();
 
-                    testLines = filter.ToArray();
-                    // 检查是否包含预期的中文文本
-                    var hasExpectedText = testLines.Any(l => 
-                       l.Contains("P", StringComparison.OrdinalIgnoreCase) 
-                    || l.Contains("Q", StringComparison.OrdinalIgnoreCase)
-                    || l.Contains("R", StringComparison.OrdinalIgnoreCase)
-                    || l.Contains("S", StringComparison.OrdinalIgnoreCase)
-                    || l.Contains("QRS", StringComparison.OrdinalIgnoreCase)
-                    || l.Contains("PR", StringComparison.OrdinalIgnoreCase)
-                    || l.Contains("QT", StringComparison.OrdinalIgnoreCase));
-                    if (hasExpectedText)
-                    {
-                        lines = testLines;
-                        readSuccess = true;
-                        break;
-                    }
-                }
-                catch
+                // 检查是否包含预期的中文文本
+                var hasExpectedText = relevantLines.Any(l =>
+                   l.Contains('P', StringComparison.OrdinalIgnoreCase)
+                || l.Contains('Q', StringComparison.OrdinalIgnoreCase)
+                || l.Contains('R', StringComparison.OrdinalIgnoreCase)
+                || l.Contains('S', StringComparison.OrdinalIgnoreCase)
+                || l.Contains("QRS", StringComparison.OrdinalIgnoreCase)
+                || l.Contains("PR", StringComparison.OrdinalIgnoreCase)
+                || l.Contains("QT", StringComparison.OrdinalIgnoreCase));
+
+                if (!hasExpectedText || relevantLines.Length == 0)
                 {
-                    continue;
+                    return result; // 返回默认值
+                }
+
+                // 从CSV底部的总结部分提取间期值
+                // 格式: P时限：115 ms, Q时限：74 ms, R时限：49 ms, S时限：46 ms
+                // QRS时限：100 ms, PR间期：178 ms, QT间期：398 ms, QTC间期：398 ms
+                foreach (var line in relevantLines)
+                {
+                    if (line.StartsWith("P") && !line.StartsWith("PR"))
+                    {
+                        result.PWidth = ExtractValue(line);
+                    }
+                    else if (line.StartsWith("Q") && !line.StartsWith("QT") && !line.StartsWith("QRS"))
+                    {
+                        result.QWidth = ExtractValue(line);
+                    }
+                    else if (line.StartsWith("R"))
+                    {
+                        result.RWidth = ExtractValue(line);
+                    }
+                    else if (line.StartsWith("S"))
+                    {
+                        result.SWidth = ExtractValue(line);
+                    }
+                    else if (line.StartsWith("QRS"))
+                    {
+                        result.QRSWidth = ExtractValue(line);
+                    }
+                    else if (line.StartsWith("PR"))
+                    {
+                        result.PRInterval = ExtractValue(line);
+                    }
+                    else if (line.StartsWith("QT") && !line.StartsWith("QTC"))
+                    {
+                        result.QTInterval = ExtractValue(line);
+                    }
                 }
             }
-
-            if (!readSuccess || lines.Length == 0)
+            catch (Exception ex)
             {
-                return result; // 返回默认值
-            }
-
-            // 从CSV底部的总结部分提取间期值
-            // 格式: P时限：115 ms, Q时限：74 ms, R时限：49 ms, S时限：46 ms
-            // QRS时限：100 ms, PR间期：178 ms, QT间期：398 ms, QTC间期：398 ms
-            foreach (var line in lines)
-            {
-                if (line.StartsWith("P") && !line.StartsWith("PR")) 
-                {
-                    result.PWidth = ExtractValue(line);
-                }
-                else if (line.StartsWith("Q") && !line.StartsWith("QT") && !line.StartsWith("QRS"))
-                {
-                    result.QWidth = ExtractValue(line);
-                }
-                else if (line.StartsWith("R"))
-                {
-                    result.RWidth = ExtractValue(line);
-                }
-                else if (line.StartsWith("S"))
-                {
-                    result.SWidth = ExtractValue(line);
-                }
-                else if (line.StartsWith("QRS"))
-                {
-                    result.QRSWidth = ExtractValue(line);
-                }
-                else if (line.StartsWith("PR"))
-                {
-                    result.PRInterval = ExtractValue(line);
-                }
-                else if (line.StartsWith("QT") && !line.StartsWith("QTC"))
-                {
-                    result.QTInterval = ExtractValue(line);
-                }
+                Log.Error(ex, "读取文件 {FilePath} 时出错", filePath);
             }
 
             return result;
+        }
+
+        public IntervalMeasurement ExtractIntervalMeasurements(string filePath)
+        {
+            // 同步版本，调用异步版本
+            return ExtractIntervalMeasurementsAsync(filePath).GetAwaiter().GetResult();
         }
 
         private double ExtractValue(string line)
