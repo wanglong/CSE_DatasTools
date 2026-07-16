@@ -321,7 +321,7 @@ namespace CSE_DatasTools.Services
         /// 批量处理Data2文件夹中的CSV文件，提取P宽、QRS宽、PR间期、QT间期
         /// 文件命名模式：年月日时分表-MA1_001.CSV 到 MA1_125.CSV
         /// </summary>
-        public List<IntervalMeasurementSummary> ProcessData2Folder(string folderPath, EcgFileReader reader)
+        public List<IntervalMeasurementSummary> ProcessData2Folder(string folderPath, EcgFileReader reader, int batchSize = 100)
         {
             // 获取文件夹下所有CSV文件
             var csvFiles = Directory.GetFiles(folderPath, "*.csv")
@@ -334,44 +334,71 @@ namespace CSE_DatasTools.Services
                 return new List<IntervalMeasurementSummary>();
             }
 
-            Log.Information("找到 {CsvFileCount} 个CSV文件，开始处理...", csvFiles.Count);
+            Log.Information("找到 {CsvFileCount} 个CSV文件，开始分批处理（批次大小: {BatchSize}）...", csvFiles.Count, batchSize);
 
             var summaries = new List<IntervalMeasurementSummary>();
+            var totalFiles = csvFiles.Count;
+            var processedFiles = 0;
 
-            foreach (var csvFile in csvFiles)
+            // 分批处理文件
+            for (int i = 0; i < csvFiles.Count; i += batchSize)
             {
-                try
-                {
-                    // 从文件名中提取编号（如 MA1_001）
-                    var fileName = Path.GetFileNameWithoutExtension(csvFile);
-                    var fileNumber = ExtractFileNumber(fileName);
+                var batch = csvFiles.Skip(i).Take(batchSize).ToList();
+                var batchSummaries = new List<IntervalMeasurementSummary>();
 
-                    if (string.IsNullOrEmpty(fileNumber))
+                // 处理当前批次
+                foreach (var csvFile in batch)
+                {
+                    try
                     {
-                        Log.Warning("  跳过文件：{FileName}（无法提取编号）", fileName);
-                        continue;
+                        // 从文件名中提取编号（如 MA1_001）
+                        var fileName = Path.GetFileNameWithoutExtension(csvFile);
+                        var fileNumber = ExtractFileNumber(fileName);
+
+                        if (string.IsNullOrEmpty(fileNumber))
+                        {
+                            Log.Warning("  跳过文件：{FileName}（无法提取编号）", fileName);
+                            continue;
+                        }
+
+                        // 提取间期测量值
+                        var intervalMeasurement = reader.ExtractIntervalMeasurements(csvFile);
+
+                        // 创建汇总记录
+                        var summary = new IntervalMeasurementSummary
+                        {
+                            FileNumber = fileNumber,
+                            PWidth = intervalMeasurement.PWidth,
+                            QRSWidth = intervalMeasurement.QRSWidth,
+                            PRInterval = intervalMeasurement.PRInterval,
+                            QTInterval = intervalMeasurement.QTInterval
+                        };
+
+                        batchSummaries.Add(summary);
+                        processedFiles++;
+                        Log.Information("  已处理：{FileNumber} ({Processed}/{Total})", fileNumber, processedFiles, totalFiles);
                     }
-
-                    // 提取间期测量值
-                    var intervalMeasurement = reader.ExtractIntervalMeasurements(csvFile);
-
-                    // 创建汇总记录
-                    var summary = new IntervalMeasurementSummary
+                    catch (Exception ex)
                     {
-                        FileNumber = fileNumber,
-                        PWidth = intervalMeasurement.PWidth,
-                        QRSWidth = intervalMeasurement.QRSWidth,
-                        PRInterval = intervalMeasurement.PRInterval,
-                        QTInterval = intervalMeasurement.QTInterval
-                    };
+                        Log.Error(ex, "  处理文件 {CsvFile} 时出错", csvFile);
+                    }
+                }
 
-                    summaries.Add(summary);
-                    Log.Information("  已处理：{FileNumber}", fileNumber);
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "  处理文件 {CsvFile} 时出错", csvFile);
-                }
+                // 将当前批次的处理结果添加到总结果中
+                summaries.AddRange(batchSummaries);
+
+                // 监控内存使用情况
+                var memoryBefore = GC.GetTotalMemory(false);
+                Log.Information("  批次 {BatchNumber} 处理完成，当前内存使用: {MemoryUsed} bytes",
+                    (i / batchSize) + 1, memoryBefore);
+
+                // 强制垃圾回收，释放当前批次的内存
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+
+                var memoryAfter = GC.GetTotalMemory(false);
+                var memoryFreed = memoryBefore - memoryAfter;
+                Log.Information("  内存回收完成，释放了 {MemoryFreed} bytes", memoryFreed);
             }
 
             return summaries;

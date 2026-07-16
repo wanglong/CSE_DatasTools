@@ -189,8 +189,8 @@ namespace CSE_DatasTools
                                 var data2ProcessingStopwatch = Stopwatch.StartNew();
                                 var memoryBeforeData2 = GC.GetTotalMemory(false);
 
-                                // 批量提取间期测量值
-                                var measurementSummaries = processor.ProcessData2Folder(data2CurrentDirectory, reader);
+                                // 批量提取间期测量值 - 使用分批处理，每次处理100个文件
+                                var measurementSummaries = processor.ProcessData2Folder(data2CurrentDirectory, reader, 100);
 
                                 data2ProcessingStopwatch.Stop();
                                 var memoryAfterData2 = GC.GetTotalMemory(false);

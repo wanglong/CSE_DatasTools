@@ -4,11 +4,15 @@ using CsvHelper.Configuration;
 using System.Globalization;
 using System.Reflection.PortableExecutable;
 using Serilog;
+using System.Text.RegularExpressions;
 
 namespace CSE_DatasTools.Services
 {
     public class EcgFileReader
     {
+        // 预编译正则表达式，用于高效提取数字
+        private static readonly Regex NumberRegex = new Regex(@"(\d+(\.\d+)?)", RegexOptions.Compiled);
+
         public List<EcgRecord> ReadEcgFile(string filePath)
         {
             // 兼容多种 CSV 编码与非标准表头：按列索引解析数据行，避免依赖文件中可能损坏或不同编码的表头文本。
@@ -28,7 +32,7 @@ namespace CSE_DatasTools.Services
 
             using var csv = new CsvReader(reader, config);
 
-            if(csv == null)
+            if (csv == null)
             {
                 return results;
             }
@@ -79,7 +83,7 @@ namespace CSE_DatasTools.Services
 
                 // 过滤导联
                 var validLeads = new HashSet<string> { "I", "II", "V1", "V2", "V3", "V4", "V5", "V6" };
-                if(validLeads.Any(c => c == lead))
+                if (validLeads.Any(c => c == lead))
                 {
                     var rec = new EcgRecord
                     {
@@ -211,8 +215,8 @@ namespace CSE_DatasTools.Services
         private double ExtractValue(string line)
         {
             // 从类似 "P时限：115 ms" 的行中提取数字 115
-            // 提取数字部分
-            var match = System.Text.RegularExpressions.Regex.Match(line, @"(\d+(\.\d+)?)");
+            // 使用预编译的正则表达式提高性能
+            var match = NumberRegex.Match(line);
             if (match.Success)
             {
                 if (double.TryParse(match.Groups[1].Value, out var value))
