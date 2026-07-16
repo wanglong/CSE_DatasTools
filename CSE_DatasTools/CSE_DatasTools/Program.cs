@@ -14,7 +14,7 @@ namespace CSE_DatasTools
         {
 
             // 设置内存限制
-            GCSettings.LatencyMode = GCLatencyMode.LowLatency;
+            //GCSettings.LatencyMode = GCLatencyMode.LowLatency;
             
             // 生成唯一的 TraceId
             var traceId = Guid.NewGuid().ToString("N");
@@ -33,21 +33,21 @@ namespace CSE_DatasTools
             // 如果配置项为空或未配置，则使用代码中的默认值
             var baseDirectory    = !string.IsNullOrWhiteSpace(dataPaths.BaseDirectory)
                                        ? dataPaths.BaseDirectory
-                                       : @"D:\Datas";
+                                       : Path.Combine(Environment.CurrentDirectory, "Datas"); 
             var data1Directory   = !string.IsNullOrWhiteSpace(dataPaths.Data1)
                                        ? dataPaths.Data1
-                                       : @"D:\Datas\Data1";
+                                       : Path.Combine(Environment.CurrentDirectory, "Datas","Data1");
             var data2Directory   = !string.IsNullOrWhiteSpace(dataPaths.Data2)
                                        ? dataPaths.Data2
-                                       : @"D:\Datas\Data2";
+                                       : Path.Combine(Environment.CurrentDirectory, "Datas", "Data2");
 
             var data2DirectoryResult = !string.IsNullOrWhiteSpace(dataPaths.Data2Result)
                                        ? dataPaths.Data2Result
-                                       : @"D:\Datas\Data2\Result";
+                                       : Path.Combine(Environment.CurrentDirectory, "Datas", "Data2", "Result");
 
             var logDirectory     = !string.IsNullOrWhiteSpace(dataPaths.LogDirectory)
                                        ? dataPaths.LogDirectory
-                                       : @"D:\Datas\logs";
+                                       : Path.Combine(Environment.CurrentDirectory, "Datas", "logs");
 
             // ============================================================
             // 2. 配置 Serilog — 日志路径从配置读取
