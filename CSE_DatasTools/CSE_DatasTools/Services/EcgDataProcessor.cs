@@ -27,158 +27,63 @@ namespace CSE_DatasTools.Services
 
             var summaries = new List<AmplitudeSummary>();
 
+            EcgMeasurement? m1 = new EcgMeasurement();
+            EcgMeasurement? m2 = new EcgMeasurement();
+            EcgMeasurement? m3 = new EcgMeasurement();
+            EcgMeasurement? m4 = new EcgMeasurement();
+            EcgMeasurement? m5 = new EcgMeasurement();
+
+            void AddSummary(string lead, string type, Func<EcgMeasurement, double> getValue)
+            {
+                summaries.Add(new AmplitudeSummary
+                {
+                    Lead = lead,
+                    MeasurementType = type,
+                    File1Value = getValue(m1),
+                    File2Value = getValue(m2),
+                    File3Value = getValue(m3),
+                    File4Value = getValue(m4),
+                    File5Value = getValue(m5),
+                    AverageValue = Math.Round(new[] { m1, m2, m3, m4, m5 }.Average(getValue), 0)
+                });
+            }
+
             foreach (var lead in TargetLeads)
             {
-                var m1 = file1Measurements.FirstOrDefault(m => m.Lead == lead);
-                var m2 = file2Measurements.FirstOrDefault(m => m.Lead == lead);
-                var m3 = file3Measurements.FirstOrDefault(m => m.Lead == lead);
-                var m4 = file4Measurements.FirstOrDefault(m => m.Lead == lead);
-                var m5 = file5Measurements.FirstOrDefault(m => m.Lead == lead);
-
-                //void AddSummary(string lead, string type, Func<EcgMeasurement, double> getValue)
-                //{
-                //    summaries.Add(new AmplitudeSummary
-                //    {
-                //        Lead = lead,
-                //        MeasurementType = type,
-                //        File1Value = getValue(m1),
-                //        File2Value = getValue(m2),
-                //        File3Value = getValue(m3),
-                //        File4Value = getValue(m4),
-                //        File5Value = getValue(m5),
-                //        AverageValue = Math.Round(new[] { m1, m2, m3, m4, m5 }.Average(getValue), 0)
-                //    });
-                //}
+                m1 = file1Measurements.FirstOrDefault(m => m.Lead == lead);
+                m2 = file2Measurements.FirstOrDefault(m => m.Lead == lead);
+                m3 = file3Measurements.FirstOrDefault(m => m.Lead == lead);
+                m4 = file4Measurements.FirstOrDefault(m => m.Lead == lead);
+                m5 = file5Measurements.FirstOrDefault(m => m.Lead == lead);
 
                 if (m1 != null && m2 != null && m3 != null && m4 != null && m5 != null)
                 {
-                    // P1
-                    summaries.Add(new AmplitudeSummary
-                    {
-                        Lead = lead,
-                        MeasurementType = "P1",
-                        File1Value = m1.P1Amplitude,
-                        File2Value = m2.P1Amplitude,
-                        File3Value = m3.P1Amplitude,
-                        File4Value = m4.P1Amplitude,
-                        File5Value = m5.P1Amplitude,
-                        AverageValue = Math.Round((m1.P1Amplitude + m2.P1Amplitude + m3.P1Amplitude + m4.P1Amplitude + m5.P1Amplitude) / 5, 0),
-                        StandardValue = 0
-                    });
-
-                    //AddSummary(lead, "P1", m => m.P1Amplitude);
+                    // P1                    
+                    AddSummary(lead, "P1", m => m.P1Amplitude);
 
                     // Q
-                    summaries.Add(new AmplitudeSummary
-                    {
-                        Lead = lead,
-                        MeasurementType = "Q",
-                        File1Value = m1.QAmplitude,
-                        File2Value = m2.QAmplitude,
-                        File3Value = m3.QAmplitude,
-                        File4Value = m4.QAmplitude,
-                        File5Value = m5.QAmplitude,
-                        AverageValue = Math.Round((m1.QAmplitude + m2.QAmplitude + m3.QAmplitude + m4.QAmplitude + m5.QAmplitude) / 5, 0),
-                        StandardValue = 0
-                    });
+                    AddSummary(lead, "Q", m => m.QAmplitude);
 
                     // R
-                    summaries.Add(new AmplitudeSummary
-                    {
-                        Lead = lead,
-                        MeasurementType = "R",
-                        File1Value = m1.RAmplitude,
-                        File2Value = m2.RAmplitude,
-                        File3Value = m3.RAmplitude,
-                        File4Value = m4.RAmplitude,
-                        File5Value = m5.RAmplitude,
-                        AverageValue = Math.Round((m1.RAmplitude + m2.RAmplitude + m3.RAmplitude + m4.RAmplitude + m5.RAmplitude) / 5, 0),
-                        StandardValue = 0
-                    });
+                    AddSummary(lead, "R", m => m.RAmplitude);
 
                     // S
-                    summaries.Add(new AmplitudeSummary
-                    {
-                        Lead = lead,
-                        MeasurementType = "S",
-                        File1Value = m1.SAmplitude,
-                        File2Value = m2.SAmplitude,
-                        File3Value = m3.SAmplitude,
-                        File4Value = m4.SAmplitude,
-                        File5Value = m5.SAmplitude,
-                        AverageValue = Math.Round((m1.SAmplitude + m2.SAmplitude + m3.SAmplitude + m4.SAmplitude + m5.SAmplitude) / 5, 0),
-                        StandardValue = 0
-                    });
+                    AddSummary(lead, "S", m => m.SAmplitude);
 
                     // ST20
-                    summaries.Add(new AmplitudeSummary
-                    {
-                        Lead = lead,
-                        MeasurementType = "ST20",
-                        File1Value = m1.ST20Amplitude,
-                        File2Value = m2.ST20Amplitude,
-                        File3Value = m3.ST20Amplitude,
-                        File4Value = m4.ST20Amplitude,
-                        File5Value = m5.ST20Amplitude,
-                        AverageValue = Math.Round((m1.ST20Amplitude + m2.ST20Amplitude + m3.ST20Amplitude + m4.ST20Amplitude + m5.ST20Amplitude) / 5, 0),
-                        StandardValue = 0
-                    });
+                    AddSummary(lead, "ST20", m => m.ST20Amplitude);
 
                     // ST40
-                    summaries.Add(new AmplitudeSummary
-                    {
-                        Lead = lead,
-                        MeasurementType = "ST40",
-                        File1Value = m1.ST40Amplitude,
-                        File2Value = m2.ST40Amplitude,
-                        File3Value = m3.ST40Amplitude,
-                        File4Value = m4.ST40Amplitude,
-                        File5Value = m5.ST40Amplitude,
-                        AverageValue = Math.Round((m1.ST40Amplitude + m2.ST40Amplitude + m3.ST40Amplitude + m4.ST40Amplitude + m5.ST40Amplitude) / 5, 0),
-                        StandardValue = 0
-                    });
+                    AddSummary(lead, "ST40", m => m.ST40Amplitude);
 
                     // ST60
-                    summaries.Add(new AmplitudeSummary
-                    {
-                        Lead = lead,
-                        MeasurementType = "ST60",
-                        File1Value = m1.ST60Amplitude,
-                        File2Value = m2.ST60Amplitude,
-                        File3Value = m3.ST60Amplitude,
-                        File4Value = m4.ST60Amplitude,
-                        File5Value = m5.ST60Amplitude,
-                        AverageValue = Math.Round((m1.ST60Amplitude + m2.ST60Amplitude + m3.ST60Amplitude + m4.ST60Amplitude + m5.ST60Amplitude) / 5, 0),
-                        StandardValue = 0
-                    });
+                    AddSummary(lead, "ST60", m => m.ST60Amplitude);
 
                     // ST80
-                    summaries.Add(new AmplitudeSummary
-                    {
-                        Lead = lead,
-                        MeasurementType = "ST80",
-                        File1Value = m1.ST80Amplitude,
-                        File2Value = m2.ST80Amplitude,
-                        File3Value = m3.ST80Amplitude,
-                        File4Value = m4.ST80Amplitude,
-                        File5Value = m5.ST80Amplitude,
-                        AverageValue = Math.Round((m1.ST80Amplitude + m2.ST80Amplitude + m3.ST80Amplitude + m4.ST80Amplitude + m5.ST80Amplitude) / 5, 0),
-                        StandardValue = 0
-                    });
+                    AddSummary(lead, "ST80", m => m.ST80Amplitude);
 
                     // T
-                    summaries.Add(new AmplitudeSummary
-                    {
-                        Lead = lead,
-                        MeasurementType = "T",
-                        File1Value = m1.TAmplitude,
-                        File2Value = m2.TAmplitude,
-                        File3Value = m3.TAmplitude,
-                        File4Value = m4.TAmplitude,
-                        File5Value = m5.TAmplitude,
-                        AverageValue = Math.Round((m1.TAmplitude + m2.TAmplitude + m3.TAmplitude + m4.TAmplitude + m5.TAmplitude) / 5, 0),
-                        StandardValue = 0
-                    });
+                    AddSummary(lead, "T", m => m.TAmplitude);
                 }
             }
 
@@ -210,109 +115,49 @@ namespace CSE_DatasTools.Services
             var file3Interval = reader.ExtractIntervalMeasurements(csvFiles[2]);
             var file4Interval = reader.ExtractIntervalMeasurements(csvFiles[3]);
             var file5Interval = reader.ExtractIntervalMeasurements(csvFiles[4]);
-
+            
             var summaries = new List<IntervalSummary>();
+
+            void AddSummaryInterval(string lead, string type, Func<IntervalMeasurement, double> getValue)
+            {
+                summaries.Add(new IntervalSummary
+                {
+                    Lead = lead,
+                    MeasurementType = type,
+                    File1Value = getValue(file1Interval),
+                    File2Value = getValue(file2Interval),
+                    File3Value = getValue(file3Interval),
+                    File4Value = getValue(file4Interval),
+                    File5Value = getValue(file5Interval),
+                    AverageValue = Math.Round(new[] { file1Interval, file2Interval, file3Interval, file4Interval, file5Interval }.Average(getValue), 0)
+                });
+            }
 
             // 创建7种间期类型的摘要（P宽、Q宽、R宽、S宽、QRS宽、PR间期、QT间期）
             // 每种类型占一行
-
-            // P宽
-            summaries.Add(new IntervalSummary
+            if (file1Interval != null && file2Interval != null && file3Interval != null && file4Interval != null && file5Interval != null)
             {
-                Lead = "全部导联",
-                MeasurementType = "P波时限",
-                File1Value = file1Interval.PWidth,
-                File2Value = file2Interval.PWidth,
-                File3Value = file3Interval.PWidth,
-                File4Value = file4Interval.PWidth,
-                File5Value = file5Interval.PWidth,
-                AverageValue = Math.Round((file1Interval.PWidth + file2Interval.PWidth + file3Interval.PWidth + file4Interval.PWidth + file5Interval.PWidth) / 5, 0),
-                StandardValue = 0
-            });
+                // P宽
+                AddSummaryInterval("全部导联", "P波时限", m => m.PWidth);
 
-            // Q宽
-            summaries.Add(new IntervalSummary
-            {
-                Lead = "全部导联",
-                MeasurementType = "Q波时限",
-                File1Value = file1Interval.QWidth,
-                File2Value = file2Interval.QWidth,
-                File3Value = file3Interval.QWidth,
-                File4Value = file4Interval.QWidth,
-                File5Value = file5Interval.QWidth,
-                AverageValue = Math.Round((file1Interval.QWidth + file2Interval.QWidth + file3Interval.QWidth + file4Interval.QWidth + file5Interval.QWidth) / 5, 0),
-                StandardValue = 0
-            });
+                // Q宽
+                AddSummaryInterval("全部导联", "Q波时限", m => m.QWidth);
 
-            // R宽
-            summaries.Add(new IntervalSummary
-            {
-                Lead = "全部导联",
-                MeasurementType = "R波时限",
-                File1Value = file1Interval.RWidth,
-                File2Value = file2Interval.RWidth,
-                File3Value = file3Interval.RWidth,
-                File4Value = file4Interval.RWidth,
-                File5Value = file5Interval.RWidth,
-                AverageValue = Math.Round((file1Interval.RWidth + file2Interval.RWidth + file3Interval.RWidth + file4Interval.RWidth + file5Interval.RWidth) / 5, 0),
-                StandardValue = 0
-            });
+                // R宽
+                AddSummaryInterval("全部导联", "R波时限", m => m.RWidth);
 
-            // S宽
-            summaries.Add(new IntervalSummary
-            {
-                Lead = "全部导联",
-                MeasurementType = "S波时限",
-                File1Value = file1Interval.SWidth,
-                File2Value = file2Interval.SWidth,
-                File3Value = file3Interval.SWidth,
-                File4Value = file4Interval.SWidth,
-                File5Value = file5Interval.SWidth,
-                AverageValue = Math.Round((file1Interval.SWidth + file2Interval.SWidth + file3Interval.SWidth + file4Interval.SWidth + file5Interval.SWidth) / 5, 0),
-                StandardValue = 0
-            });
+                // S宽
+                AddSummaryInterval("全部导联", "S波时限", m => m.SWidth);
 
-            // QRS宽
-            summaries.Add(new IntervalSummary
-            {
-                Lead = "全部导联",
-                MeasurementType = "QRS波时限",
-                File1Value = file1Interval.QRSWidth,
-                File2Value = file2Interval.QRSWidth,
-                File3Value = file3Interval.QRSWidth,
-                File4Value = file4Interval.QRSWidth,
-                File5Value = file5Interval.QRSWidth,
-                AverageValue = Math.Round((file1Interval.QRSWidth + file2Interval.QRSWidth + file3Interval.QRSWidth + file4Interval.QRSWidth + file5Interval.QRSWidth) / 5, 0),
-                StandardValue = 0
-            });
+                // QRS宽
+                AddSummaryInterval("全部导联", "QRS波时限", m => m.QRSWidth);
 
-            // PR间期
-            summaries.Add(new IntervalSummary
-            {
-                Lead = "全部导联",
-                MeasurementType = "PQ间期",
-                File1Value = file1Interval.PRInterval,
-                File2Value = file2Interval.PRInterval,
-                File3Value = file3Interval.PRInterval,
-                File4Value = file4Interval.PRInterval,
-                File5Value = file5Interval.PRInterval,
-                AverageValue = Math.Round((file1Interval.PRInterval + file2Interval.PRInterval + file3Interval.PRInterval + file4Interval.PRInterval + file5Interval.PRInterval) / 5, 0),
-                StandardValue = 0
-            });
+                // PR间期
+                AddSummaryInterval("全部导联", "PQ间期", m => m.PRInterval);
 
-            // QT间期
-            summaries.Add(new IntervalSummary
-            {
-                Lead = "全部导联",
-                MeasurementType = "QT间期",
-                File1Value = file1Interval.QTInterval,
-                File2Value = file2Interval.QTInterval,
-                File3Value = file3Interval.QTInterval,
-                File4Value = file4Interval.QTInterval,
-                File5Value = file5Interval.QTInterval,
-                AverageValue = Math.Round((file1Interval.QTInterval + file2Interval.QTInterval + file3Interval.QTInterval + file4Interval.QTInterval + file5Interval.QTInterval) / 5, 0),
-                StandardValue = 0
-            });
+                // QT间期
+                AddSummaryInterval("全部导联", "QT间期", m => m.QTInterval);
+            }            
 
             return summaries;
         }
